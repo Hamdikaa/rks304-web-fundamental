@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+  <!-- Navbar -->
+  <nav class="bg-blue-600 text-white px-6 py-4 flex justify-between items-center shadow">
+    <h1 class="text-xl font-bold">Dashboard</h1>
+    <a href="register.html" class="bg-white text-blue-600 px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-gray-100 transition">
+      + Tambah Pengguna
+    </a>
+  </nav>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- Notifikasi sukses -->
+    <div id="notif" class="hidden bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-lg text-sm"></div>
+
+    <!-- Selamat datang -->
+    <section class="bg-white rounded-xl shadow p-6">
+      <h2 id="welcome" class="text-2xl font-bold text-gray-800">Selamat datang!</h2>
+      <p id="welcomeSub" class="text-gray-500 text-sm mt-1">Kelola data pengguna yang sudah terdaftar di bawah ini.</p>
+    </section>
+
+    <!-- Statistik -->
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white rounded-xl shadow p-5">
+        <p class="text-sm text-gray-500">Total Pengguna</p>
+        <p id="statTotal" class="text-3xl font-bold text-blue-600 mt-1">0</p>
+      </div>
+      <div class="bg-white rounded-xl shadow p-5">
+        <p class="text-sm text-gray-500">Pendaftar Terbaru</p>
+        <p id="statLatest" class="text-lg font-semibold text-gray-800 mt-2 truncate">-</p>
+      </div>
+      <div class="bg-white rounded-xl shadow p-5">
+        <p class="text-sm text-gray-500">Rata-rata Usia</p>
+        <p id="statAge" class="text-3xl font-bold text-blue-600 mt-1">-</p>
+      </div>
+    </section>
+
+    <!-- Tabel pengguna -->
+    <section class="bg-white rounded-xl shadow p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h3 class="text-lg font-semibold text-gray-800">Data Pengguna</h3>
+        <input id="search" type="text" placeholder="Cari nama / username..."
+          class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64">
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+            <tr>
+              <th class="px-4 py-3">#</th>
+              <th class="px-4 py-3">Username</th>
+              <th class="px-4 py-3">Nama</th>
+              <th class="px-4 py-3">Tgl Lahir</th>
+              <th class="px-4 py-3">Alamat</th>
+              <th class="px-4 py-3">No. Telpon</th>
+              <th class="px-4 py-3 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+
+      <p id="emptyState" class="hidden text-center text-gray-500 py-10">
+        Belum ada data. Klik <a href="register.html" class="text-blue-600 font-medium hover:underline">Tambah Pengguna</a> untuk mendaftar.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_USERS = 'users';
+    const STORAGE_CURRENT = 'currentUser';
+
+    const tableBody = document.getElementById('tableBody');
+    const emptyState = document.getElementById('emptyState');
+    const searchInput = document.getElementById('search');
+
+    function getUsers() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_USERS)) || [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function saveUsers(users) {
+      localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
+    }
+
+    function formatTanggal(iso) {
+      if (!iso) return '-';
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('id-ID', {
+        day: 'numeric', month: 'long', year: 'numeric',
+      });
+    }
+
+    function hitungUsia(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      const now = new Date();
+      let usia = now.getFullYear() - y;
+      if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) usia--;
+      return usia;
+    }
+
+    // Buat sel tabel dengan textContent (aman dari injeksi HTML)
+    function cell(text, className) {
+      const td = document.createElement('td');
+      td.className = 'px-4 py-3 ' + (className || '');
+      td.textContent = text;
+      return td;
+    }
+
+    function renderStats(users) {
+      document.getElementById('statTotal').textContent = users.length;
+      document.getElementById('statLatest').textContent =
+        users.length ? users[users.length - 1].nama : '-';
+      document.getElementById('statAge').textContent = users.length
+        ? Math.round(users.reduce((sum, u) => sum + hitungUsia(u.tanggalLahir), 0) / users.length) + ' th'
+        : '-';
+    }
+
+    function renderTable() {
+      const users = getUsers();
+      const keyword = searchInput.value.trim().toLowerCase();
+      const currentId = localStorage.getItem(STORAGE_CURRENT);
+
+      renderStats(users);
+
+      const filtered = users.filter(
+        (u) => u.nama.toLowerCase().includes(keyword) || u.username.toLowerCase().includes(keyword)
+      );
+
+      tableBody.innerHTML = '';
+      emptyState.classList.toggle('hidden', users.length > 0);
+
+      filtered.forEach((u, i) => {
+        const tr = document.createElement('tr');
+        tr.className = String(u.id) === currentId ? 'bg-blue-50' : 'hover:bg-gray-50';
+
+        tr.appendChild(cell(i + 1));
+        tr.appendChild(cell(u.username, 'font-medium'));
+        tr.appendChild(cell(u.nama));
+        tr.appendChild(cell(formatTanggal(u.tanggalLahir)));
+        tr.appendChild(cell(u.alamat, 'max-w-xs truncate'));
+        tr.appendChild(cell(u.telpon));
+
+        const aksi = document.createElement('td');
+        aksi.className = 'px-4 py-3 text-center';
+        const btn = document.createElement('button');
+        btn.textContent = 'Hapus';
+        btn.className = 'text-red-600 hover:text-red-800 font-medium text-sm';
+        btn.addEventListener('click', () => hapusUser(u.id, u.nama));
+        aksi.appendChild(btn);
+        tr.appendChild(aksi);
+
+        tableBody.appendChild(tr);
+      });
+
+      if (users.length && !filtered.length) {
+        const tr = document.createElement('tr');
+        const td = cell('Tidak ada data yang cocok dengan pencarian.', 'text-center text-gray-500 py-6');
+        td.colSpan = 7;
+        tr.appendChild(td);
+        tableBody.appendChild(tr);
+      }
+    }
+
+    function hapusUser(id, nama) {
+      if (!confirm('Hapus data "' + nama + '"?')) return;
+      saveUsers(getUsers().filter((u) => u.id !== id));
+      if (String(id) === localStorage.getItem(STORAGE_CURRENT)) {
+        localStorage.removeItem(STORAGE_CURRENT);
+      }
+      renderTable();
+      renderWelcome(false);
+    }
+
+    function renderWelcome(justRegistered) {
+      const currentId = localStorage.getItem(STORAGE_CURRENT);
+      const me = getUsers().find((u) => String(u.id) === currentId);
+      const welcome = document.getElementById('welcome');
+      const notif = document.getElementById('notif');
+
+      if (me) {
+        welcome.textContent = 'Selamat datang, ' + me.nama + '!';
+        if (justRegistered) {
+          notif.textContent = 'Pendaftaran berhasil. Data kamu sudah tersimpan.';
+          notif.classList.remove('hidden');
+          setTimeout(() => notif.classList.add('hidden'), 4000);
+        }
+      } else {
+        welcome.textContent = 'Selamat datang!';
+      }
+    }
+
+    searchInput.addEventListener('input', renderTable);
+
+    renderWelcome(true);
+    renderTable();
+  </script>
+</body>
+</html>
